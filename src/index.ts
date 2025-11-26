@@ -830,6 +830,478 @@ server.tool(
   }
 );
 
+// === WRITE OPERATIONS ===
+
+// Create a new deal
+server.tool(
+  "create-deal",
+  "Create a new deal in Pipedrive",
+  {
+    title: z.string().describe("Deal title (required)"),
+    stageId: z.number().optional().describe("Pipeline stage ID (use get-stages to find IDs)"),
+    ownerId: z.number().optional().describe("Owner/user ID (use get-users to find IDs)"),
+    value: z.number().optional().describe("Deal value/amount"),
+    currency: z.string().optional().describe("Currency code (e.g., 'USD', 'EUR')"),
+    personId: z.number().optional().describe("Associated person ID"),
+    organizationId: z.number().optional().describe("Associated organization ID"),
+    status: z.enum(['open', 'won', 'lost']).optional().describe("Deal status (default: open)"),
+    expectedCloseDate: z.string().optional().describe("Expected close date (YYYY-MM-DD format)")
+  },
+  async ({ title, stageId, ownerId, value, currency, personId, organizationId, status, expectedCloseDate }) => {
+    try {
+      const dealData: any = { title };
+      if (stageId) dealData.stage_id = stageId;
+      if (ownerId) dealData.user_id = ownerId;
+      if (value !== undefined) dealData.value = value;
+      if (currency) dealData.currency = currency;
+      if (personId) dealData.person_id = personId;
+      if (organizationId) dealData.org_id = organizationId;
+      if (status) dealData.status = status;
+      if (expectedCloseDate) dealData.expected_close_date = expectedCloseDate;
+
+      // @ts-ignore - API method exists
+      const response = await dealsApi.addDeal(dealData);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            message: `Deal "${title}" created successfully`,
+            deal: response.data
+          }, null, 2)
+        }]
+      };
+    } catch (error) {
+      console.error("Error creating deal:", error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error creating deal: ${getErrorMessage(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Update an existing deal
+server.tool(
+  "update-deal",
+  "Update an existing deal's properties",
+  {
+    dealId: z.number().describe("Deal ID to update"),
+    title: z.string().optional().describe("New deal title"),
+    value: z.number().optional().describe("New deal value"),
+    currency: z.string().optional().describe("Currency code"),
+    status: z.enum(['open', 'won', 'lost']).optional().describe("Deal status"),
+    personId: z.number().optional().describe("Associated person ID"),
+    organizationId: z.number().optional().describe("Associated organization ID"),
+    expectedCloseDate: z.string().optional().describe("Expected close date (YYYY-MM-DD)")
+  },
+  async ({ dealId, title, value, currency, status, personId, organizationId, expectedCloseDate }) => {
+    try {
+      const updateData: any = {};
+      if (title) updateData.title = title;
+      if (value !== undefined) updateData.value = value;
+      if (currency) updateData.currency = currency;
+      if (status) updateData.status = status;
+      if (personId) updateData.person_id = personId;
+      if (organizationId) updateData.org_id = organizationId;
+      if (expectedCloseDate) updateData.expected_close_date = expectedCloseDate;
+
+      // @ts-ignore - API method exists
+      const response = await dealsApi.updateDeal(dealId, updateData);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            message: `Deal ${dealId} updated successfully`,
+            deal: response.data
+          }, null, 2)
+        }]
+      };
+    } catch (error) {
+      console.error(`Error updating deal ${dealId}:`, error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error updating deal ${dealId}: ${getErrorMessage(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Update deal stage (move deal in pipeline)
+server.tool(
+  "update-deal-stage",
+  "Move a deal to a different stage in the pipeline",
+  {
+    dealId: z.number().describe("Deal ID to move"),
+    stageId: z.number().describe("Target stage ID (use get-stages to find IDs)")
+  },
+  async ({ dealId, stageId }) => {
+    try {
+      // @ts-ignore - API method exists
+      const response = await dealsApi.updateDeal(dealId, { stage_id: stageId });
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            message: `Deal ${dealId} moved to stage ${stageId}`,
+            deal: response.data
+          }, null, 2)
+        }]
+      };
+    } catch (error) {
+      console.error(`Error moving deal ${dealId} to stage ${stageId}:`, error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error moving deal: ${getErrorMessage(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Get activity types
+server.tool(
+  "get-activity-types",
+  "Get all available activity types in Pipedrive",
+  {},
+  async () => {
+    try {
+      // @ts-ignore - ActivityTypesApi exists
+      const activityTypesApi = withRateLimit(new pipedrive.ActivityTypesApi(apiClient));
+      // @ts-ignore - API method exists
+      const response = await activityTypesApi.getActivityTypes();
+      const types = response.data?.map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        key_string: t.key_string,
+        icon_key: t.icon_key,
+        active: t.active_flag
+      })) || [];
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            summary: `Found ${types.length} activity types`,
+            activity_types: types
+          }, null, 2)
+        }]
+      };
+    } catch (error) {
+      console.error("Error fetching activity types:", error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error fetching activity types: ${getErrorMessage(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Get activities for a deal
+server.tool(
+  "get-deal-activities",
+  "Get all activities associated with a specific deal",
+  {
+    dealId: z.number().describe("Deal ID to get activities for"),
+    done: z.enum(['0', '1']).optional().describe("Filter by done status: '0' for undone, '1' for done"),
+    limit: z.number().optional().describe("Maximum number of activities to return (default: 50)")
+  },
+  async ({ dealId, done, limit = 50 }) => {
+    try {
+      const params: any = { deal_id: dealId, limit };
+      if (done !== undefined) params.done = done;
+
+      // @ts-ignore - API method exists
+      const response = await activitiesApi.getActivities(params);
+      const activities = response.data || [];
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            summary: `Found ${activities.length} activities for deal ${dealId}`,
+            activities: activities.map((a: any) => ({
+              id: a.id,
+              type: a.type,
+              subject: a.subject,
+              done: a.done,
+              due_date: a.due_date,
+              due_time: a.due_time,
+              duration: a.duration,
+              note: a.note,
+              person_name: a.person_name,
+              org_name: a.org_name,
+              owner_name: a.owner_name,
+              add_time: a.add_time,
+              marked_as_done_time: a.marked_as_done_time
+            }))
+          }, null, 2)
+        }]
+      };
+    } catch (error) {
+      console.error(`Error fetching activities for deal ${dealId}:`, error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error fetching activities: ${getErrorMessage(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Create a new activity
+server.tool(
+  "create-activity",
+  "Create a new activity (meeting, call, task, etc.) linked to a deal",
+  {
+    subject: z.string().describe("Activity subject/title"),
+    type: z.string().describe("Activity type key (use get-activity-types to see available types, e.g., 'meeting', 'call', 'task', 'email')"),
+    dealId: z.number().optional().describe("Deal ID to link the activity to"),
+    personId: z.number().optional().describe("Person ID to link the activity to"),
+    organizationId: z.number().optional().describe("Organization ID to link the activity to"),
+    dueDate: z.string().optional().describe("Due date (YYYY-MM-DD format)"),
+    dueTime: z.string().optional().describe("Due time (HH:MM format, 24-hour)"),
+    duration: z.string().optional().describe("Duration (HH:MM format)"),
+    note: z.string().optional().describe("Activity note/description"),
+    done: z.boolean().optional().describe("Mark activity as done (default: false)"),
+    ownerId: z.number().optional().describe("Owner/user ID (use get-users to find IDs)")
+  },
+  async ({ subject, type, dealId, personId, organizationId, dueDate, dueTime, duration, note, done, ownerId }) => {
+    try {
+      const activityData: any = {
+        subject,
+        type
+      };
+      if (dealId) activityData.deal_id = dealId;
+      if (personId) activityData.person_id = personId;
+      if (organizationId) activityData.org_id = organizationId;
+      if (dueDate) activityData.due_date = dueDate;
+      if (dueTime) activityData.due_time = dueTime;
+      if (duration) activityData.duration = duration;
+      if (note) activityData.note = note;
+      if (done !== undefined) activityData.done = done ? 1 : 0;
+      if (ownerId) activityData.user_id = ownerId;
+
+      // @ts-ignore - API method exists
+      const response = await activitiesApi.addActivity(activityData);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            message: `Activity "${subject}" created successfully`,
+            activity: response.data
+          }, null, 2)
+        }]
+      };
+    } catch (error) {
+      console.error("Error creating activity:", error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error creating activity: ${getErrorMessage(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Update an existing activity
+server.tool(
+  "update-activity",
+  "Update an existing activity's properties",
+  {
+    activityId: z.number().describe("Activity ID to update"),
+    subject: z.string().optional().describe("New subject/title"),
+    type: z.string().optional().describe("Activity type key"),
+    dueDate: z.string().optional().describe("Due date (YYYY-MM-DD format)"),
+    dueTime: z.string().optional().describe("Due time (HH:MM format)"),
+    duration: z.string().optional().describe("Duration (HH:MM format)"),
+    note: z.string().optional().describe("Activity note/description"),
+    done: z.boolean().optional().describe("Mark activity as done/undone"),
+    ownerId: z.number().optional().describe("New owner/user ID")
+  },
+  async ({ activityId, subject, type, dueDate, dueTime, duration, note, done, ownerId }) => {
+    try {
+      const updateData: any = {};
+      if (subject) updateData.subject = subject;
+      if (type) updateData.type = type;
+      if (dueDate) updateData.due_date = dueDate;
+      if (dueTime) updateData.due_time = dueTime;
+      if (duration) updateData.duration = duration;
+      if (note) updateData.note = note;
+      if (done !== undefined) updateData.done = done ? 1 : 0;
+      if (ownerId) updateData.user_id = ownerId;
+
+      // @ts-ignore - API method exists
+      const response = await activitiesApi.updateActivity(activityId, updateData);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            message: `Activity ${activityId} updated successfully`,
+            activity: response.data
+          }, null, 2)
+        }]
+      };
+    } catch (error) {
+      console.error(`Error updating activity ${activityId}:`, error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error updating activity: ${getErrorMessage(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Mark activity as done
+server.tool(
+  "mark-activity-done",
+  "Mark an activity as completed",
+  {
+    activityId: z.number().describe("Activity ID to mark as done")
+  },
+  async ({ activityId }) => {
+    try {
+      // @ts-ignore - API method exists
+      const response = await activitiesApi.updateActivity(activityId, { done: 1 });
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            message: `Activity ${activityId} marked as done`,
+            activity: response.data
+          }, null, 2)
+        }]
+      };
+    } catch (error) {
+      console.error(`Error marking activity ${activityId} as done:`, error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error marking activity as done: ${getErrorMessage(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Create a new person
+server.tool(
+  "create-person",
+  "Create a new person/contact in Pipedrive",
+  {
+    name: z.string().describe("Person's name (required)"),
+    email: z.string().optional().describe("Email address"),
+    phone: z.string().optional().describe("Phone number"),
+    organizationId: z.number().optional().describe("Organization ID to associate with"),
+    ownerId: z.number().optional().describe("Owner/user ID")
+  },
+  async ({ name, email, phone, organizationId, ownerId }) => {
+    try {
+      const personData: any = { name };
+      if (email) personData.email = [{ value: email, primary: true, label: 'work' }];
+      if (phone) personData.phone = [{ value: phone, primary: true, label: 'work' }];
+      if (organizationId) personData.org_id = organizationId;
+      if (ownerId) personData.owner_id = ownerId;
+
+      // @ts-ignore - API method exists
+      const response = await personsApi.addPerson(personData);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            message: `Person "${name}" created successfully`,
+            person: response.data
+          }, null, 2)
+        }]
+      };
+    } catch (error) {
+      console.error("Error creating person:", error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error creating person: ${getErrorMessage(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Create a new organization
+server.tool(
+  "create-organization",
+  "Create a new organization/company in Pipedrive",
+  {
+    name: z.string().describe("Organization name (required)"),
+    address: z.string().optional().describe("Street address"),
+    city: z.string().optional().describe("City"),
+    state: z.string().optional().describe("State/province"),
+    country: z.string().optional().describe("Country"),
+    postalCode: z.string().optional().describe("Postal/ZIP code"),
+    ownerId: z.number().optional().describe("Owner/user ID")
+  },
+  async ({ name, address, city, state, country, postalCode, ownerId }) => {
+    try {
+      const orgData: any = { name };
+      
+      // Build address string if any address components provided
+      const addressParts = [address, city, state, postalCode, country].filter(Boolean);
+      if (addressParts.length > 0) {
+        orgData.address = addressParts.join(', ');
+      }
+      
+      if (ownerId) orgData.owner_id = ownerId;
+
+      // @ts-ignore - API method exists
+      const response = await organizationsApi.addOrganization(orgData);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            message: `Organization "${name}" created successfully`,
+            organization: response.data
+          }, null, 2)
+        }]
+      };
+    } catch (error) {
+      console.error("Error creating organization:", error);
+      return {
+        content: [{
+          type: "text",
+          text: `Error creating organization: ${getErrorMessage(error)}`
+        }],
+        isError: true
+      };
+    }
+  }
+);
+
 // === PROMPTS ===
 
 // Prompt for getting all deals

@@ -4,8 +4,11 @@ This is a Model Context Protocol (MCP) server that connects to the Pipedrive API
 
 ## Features
 
-- Read-only access to Pipedrive data
+- **Read and Write access** to Pipedrive data
 - Exposes deals, persons, organizations, and pipelines
+- **Create, update, and manage deals** including moving between stages
+- **Activity management**: create, update, and mark activities as done
+- **Create persons and organizations**
 - Includes all fields including custom fields
 - Predefined prompts for common operations
 - Docker support with multi-stage builds
@@ -164,6 +167,8 @@ To use this server with Claude for Desktop:
 
 ## Available Tools
 
+### Read Operations
+
 - `get-users`: Get all users/owners from Pipedrive to identify owner IDs for filtering
 - `get-deals`: Get deals with flexible filtering options (search by title, date range, owner, stage, status, value range, etc.)
 - `get-deal`: Get a specific deal by ID (including custom fields)
@@ -180,6 +185,24 @@ To use this server with Claude for Desktop:
 - `get-stages`: Get all stages from all pipelines
 - `search-leads`: Search leads by term
 - `search-all`: Search across all item types (deals, persons, organizations, etc.)
+
+### Write Operations
+
+#### Deal Management
+- `create-deal`: Create a new deal (title, stage, owner, value, currency, person, organization, status, expected close date)
+- `update-deal`: Update an existing deal's properties
+- `update-deal-stage`: Move a deal to a different stage in the pipeline
+
+#### Activity Management
+- `get-activity-types`: Get all available activity types in Pipedrive
+- `get-deal-activities`: Get all activities associated with a specific deal
+- `create-activity`: Create a new activity (meeting, call, task, etc.) linked to a deal, person, or organization
+- `update-activity`: Update an existing activity's properties
+- `mark-activity-done`: Mark an activity as completed
+
+#### Person & Organization Management
+- `create-person`: Create a new person/contact (name, email, phone, organization, owner)
+- `create-organization`: Create a new organization/company (name, address, city, state, country, postal code, owner)
 
 ## Available Prompts
 
