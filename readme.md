@@ -141,7 +141,48 @@ Optional (Transport Configuration):
 - `MCP_PORT` - Port for SSE transport (default: 3000, only used when `MCP_TRANSPORT=sse`)
 - `MCP_ENDPOINT` - Message endpoint path for SSE (default: /message, only used when `MCP_TRANSPORT=sse`)
 
-## Using with Claude
+## Using with Cline (VS Code Extension)
+
+To use this server with Cline in VS Code:
+
+1. Build the server:
+   ```bash
+   cd pipedrive-mcp-server
+   npm install
+   npm run build
+   ```
+
+2. Add to your Cline MCP settings file (`~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "pipedrive": {
+      "command": "node",
+      "args": [
+        "/path/to/pipedrive-mcp-server/build/index.js"
+      ],
+      "env": {
+        "PIPEDRIVE_API_TOKEN": "your_api_token_here",
+        "PIPEDRIVE_DOMAIN": "your-company.pipedrive.com"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
+```
+
+3. Restart VS Code or reload the Cline extension
+4. The Pipedrive tools will now be available in Cline
+
+### Getting Your Pipedrive Domain
+
+Your Pipedrive domain can be found by:
+- Looking at your Pipedrive URL (e.g., `https://yourcompany.pipedrive.com`)
+- Or querying the API: `curl "https://api.pipedrive.com/v1/users/me?api_token=YOUR_TOKEN"` and check the `company_domain` field
+
+## Using with Claude for Desktop
 
 To use this server with Claude for Desktop:
 
