@@ -944,6 +944,67 @@ server.tool(
   },
   async ({ dealId, stageId }) => {
     try {
+      // First, get the current deal to find its pipeline
+      // @ts-ignore - API method exists
+      const dealResponse = await dealsApi.getDeal(dealId);
+      const deal = dealResponse.data;
+      const currentPipelineId = deal.pipeline_id;
+
+      // Get all stages to find the target stage and verify it's in the same pipeline
+      const pipelinesResponse = await pipelinesApi.getPipelines();
+      const pipelines = pipelinesResponse.data || [];
+      
+      let targetStage: any = null;
+      for (const pipeline of pipelines) {
+        try {
+          // @ts-ignore - Type definitions for getPipelineStages are incomplete
+          const stagesResponse = await pipelinesApi.getPipelineStages(pipeline.id);
+          const stages = Array.isArray(stagesResponse?.data) ? stagesResponse.data : [];
+          
+          const foundStage = stages.find((s: any) => s.id === stageId);
+          if (foundStage) {
+            targetStage = {
+              ...foundStage,
+              pipeline_id: pipeline.id,
+              pipeline_name: pipeline.name
+            };
+            break;
+          }
+        } catch (e) {
+          console.error(`Error fetching stages for pipeline ${pipeline.id}:`, e);
+        }
+      }
+
+      if (!targetStage) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              success: false,
+              error: `Stage ${stageId} not found in any pipeline`
+            }, null, 2)
+          }],
+          isError: true
+        };
+      }
+
+      // Validate that the target stage is in the same pipeline as the deal
+      if (targetStage.pipeline_id !== currentPipelineId) {
+        const currentPipeline = pipelines.find((p: any) => p.id === currentPipelineId);
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              success: false,
+              error: `Pipeline mismatch: Deal is in pipeline "${currentPipeline?.name}" (ID: ${currentPipelineId}), but stage ${stageId} "${targetStage.name}" belongs to pipeline "${targetStage.pipeline_name}" (ID: ${targetStage.pipeline_id})`,
+              suggestion: `Please use a stage from the "${currentPipeline?.name}" pipeline`
+            }, null, 2)
+          }],
+          isError: true
+        };
+      }
+
+      // Update the deal to the new stage
       // @ts-ignore - API method exists
       const response = await dealsApi.updateDeal(dealId, { stage_id: stageId });
       return {
@@ -951,7 +1012,7 @@ server.tool(
           type: "text",
           text: JSON.stringify({
             success: true,
-            message: `Deal ${dealId} moved to stage ${stageId}`,
+            message: `Deal ${dealId} "${deal.title}" moved to stage "${targetStage.name}" (ID: ${stageId}) in pipeline "${targetStage.pipeline_name}"`,
             deal: response.data
           }, null, 2)
         }]
